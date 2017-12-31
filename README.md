@@ -2,10 +2,10 @@
 
 ## Wiring
 
-| ESP8266 | HT1632C | Color  |
-|---------|---------|--------|
-| D5      | DATA    | Blue   |
-| D6      | CS      | Green  |
-| D7      | WR      | Yellow |
-| D8      | CLK     | Orange |
+| ESP8266 | HT1632C | Color  | GPIO |
+|---------|---------|--------|------|
+| D5      | DATA    | Blue   | 14   |
+| D6      | CS      | Green  | 12   |
+| D7      | WR      | Yellow | 13   |
+| D8      | CLK     | Orange | 15   |
 
