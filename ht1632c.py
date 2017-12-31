@@ -84,6 +84,23 @@ class HT1632C(FrameBuffer):
         # Reinit display
         self.begin()
 
+    def get_matrix_data(self, row, col):
+        start_row = row * 2
+        start_col = col * 4
+        return bytearray([
+            self.pixel(col, row)
+            for row in range(start_row, start_row + 8)
+            for col in range(start_col, start_col + 8)
+        ])
+
+    def _is_green(self, value):
+        # Value is either 3 (0b11) or 1 (0b01)
+        return value & 0b1
+
+    def _is_red(self, value):
+        # Value is either 3 (0b11) or 2 (0b10)
+        return (value & 0b10) >> 1
+
     def _delay(self):
         sleep_us(1)
 
@@ -195,7 +212,7 @@ class HT1632C(FrameBuffer):
         for i in range(8):
             for j in range(8):
                 k = buffer[j * 4 + 64] >> (7 - i)
-                k = k & 0x01
+                k = self._is_red(k)
 
                 self.wr.off()
                 self.data(k)
@@ -208,7 +225,7 @@ class HT1632C(FrameBuffer):
         for i in range(8):
             for j in range(8):
                 k = buffer[j * 4 + 65] >> (7 - i)
-                k = k & 0x01
+                k = self._is_red(k)
 
                 self.wr.off()
                 self.data(k)
@@ -221,7 +238,7 @@ class HT1632C(FrameBuffer):
         for i in range(8):
             for j in range(8):
                 k = buffer[j * 4] >> (7 - i)
-                k = k & 0x02
+                k = self._is_green(k)
 
                 self.wr.off()
                 self.data(k)
@@ -234,7 +251,7 @@ class HT1632C(FrameBuffer):
         for i in range(8):
             for j in range(8):
                 k = buffer[j * 4 + 1] >> (7 - i)
-                k = k & 0x02
+                k = self._is_green(k)
 
                 self.wr.off()
                 self.data(k)
