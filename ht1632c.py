@@ -84,25 +84,28 @@ class HT1632C(FrameBuffer):
         # Reinit display
         self.begin()
 
-    def get_matrix_data(self, row, col):
-        start_row = row * 2
-        start_col = col * 4
+    def get_matrix_data(self, matrix_row, matrix_col):
+        start_row = matrix_row * 8
+        start_col = matrix_col * 8
         return bytearray([
             self.pixel(col, row)
-            for row in range(start_row, start_row + 8)
             for col in range(start_col, start_col + 8)
+            for row in range(start_row, start_row + 8)
         ])
 
     def _is_green(self, value):
+        return value in (1, 3)
         # Value is either 3 (0b11) or 1 (0b01)
-        return value & 0b1
+        #return value & 0b1
 
     def _is_red(self, value):
+        return value in (2, 3)
         # Value is either 3 (0b11) or 2 (0b10)
-        return (value & 0b10) >> 1
+        #return (value & 0b10) >> 1
 
     def _delay(self):
-        sleep_us(1)
+        #sleep_us(1)
+        pass
 
     def _select_all(self):
         self.clk.off()
@@ -170,13 +173,13 @@ class HT1632C(FrameBuffer):
             cmd = cmd << 1
             j = j >> 11
             self.wr.off()
-            self.data.value(j)
+            self.data(j)
             self._delay()
 
             self.wr.on()
             self._delay()
 
-    def _write_data(self, buffer):
+    def _write_data(self, m1, m2):
         self.wr.off()
         self.data.on()
         self._delay()
@@ -206,59 +209,49 @@ class HT1632C(FrameBuffer):
             self.wr.on()
             self._delay()
 
-        k = 0b00000000
-
         # Red matrix 1
-        for i in range(8):
-            for j in range(8):
-                k = buffer[j * 4 + 64] >> (7 - i)
-                k = self._is_red(k)
+        for value in m1:
+            value = self._is_red(value)
 
-                self.wr.off()
-                self.data(k)
-                self._delay()
+            self.wr.off()
+            self.data(value)
+            self._delay()
 
-                self.wr.on()
-                self._delay()
+            self.wr.on()
+            self._delay()
 
         # Red matrix 2
-        for i in range(8):
-            for j in range(8):
-                k = buffer[j * 4 + 65] >> (7 - i)
-                k = self._is_red(k)
+        for value in m2:
+            value = self._is_red(value)
 
-                self.wr.off()
-                self.data(k)
-                self._delay()
+            self.wr.off()
+            self.data(value)
+            self._delay()
 
-                self.wr.on()
-                self._delay()
+            self.wr.on()
+            self._delay()
 
         # Green matrix 1
-        for i in range(8):
-            for j in range(8):
-                k = buffer[j * 4] >> (7 - i)
-                k = self._is_green(k)
+        for value in m1:
+            value = self._is_green(value)
 
-                self.wr.off()
-                self.data(k)
-                self._delay()
+            self.wr.off()
+            self.data(value)
+            self._delay()
 
-                self.wr.on()
-                self._delay()
+            self.wr.on()
+            self._delay()
 
         # Green matrix 2
-        for i in range(8):
-            for j in range(8):
-                k = buffer[j * 4 + 1] >> (7 - i)
-                k = self._is_green(k)
+        for value in m2:
+            value = self._is_green(value)
 
-                self.wr.off()
-                self.data(k)
-                self._delay()
+            self.wr.off()
+            self.data(value)
+            self._delay()
 
-                self.wr.on()
-                self._delay()
+            self.wr.on()
+            self._delay()
 
     def begin(self):
         for cmd in (SYS_DIS,
@@ -316,8 +309,6 @@ class HT1632C(FrameBuffer):
         self._select_none()
 
     def show(self):
-        self.begin()
-
         self.clk.off()
         self.cs.off()
         self._delay()
@@ -326,8 +317,10 @@ class HT1632C(FrameBuffer):
         self._delay()
         self.clk.off()
 
-        # HT1632 #1
-        self._write_data(self._buffer)
+        # HT1632 #1, ROW = 0, COL = 0 and 1
+        m1 = self.get_matrix_data(0, 0)
+        m2 = self.get_matrix_data(0, 1)
+        self._write_data(m1, m2)
 
         self.cs.on()
         self._delay()
@@ -336,8 +329,10 @@ class HT1632C(FrameBuffer):
         self._delay()
         self.clk.off()
 
-        # HT1632 #2
-        self._write_data(self._buffer[2:])
+        # HT1632 #2, ROW = 0, COL = 2 and 3
+        m1 = self.get_matrix_data(0, 2)
+        m2 = self.get_matrix_data(0, 3)
+        self._write_data(m1, m2)
 
         self._delay()
 
@@ -345,8 +340,10 @@ class HT1632C(FrameBuffer):
         self._delay()
         self.clk.off()
 
-        # HT1632 #3
-        self._write_data(self._buffer[32:])
+        # HT1632 #3, ROW = 1, COL = 0 and 1
+        m1 = self.get_matrix_data(1, 0)
+        m2 = self.get_matrix_data(1, 1)
+        self._write_data(m1, m2)
 
         self._delay()
 
@@ -354,11 +351,24 @@ class HT1632C(FrameBuffer):
         self._delay()
         self.clk.off()
 
-        # HT1632 #4
-        self._write_data(self._buffer[34:])
+        # HT1632 #4, ROW = 1, COL = 2 and 3
+        m1 = self.get_matrix_data(1, 2)
+        m2 = self.get_matrix_data(1, 3)
+        self._write_data(m1, m2)
 
         self._delay()
 
         self.clk.on()
         self._delay()
         self.clk.off()
+
+
+def test():
+    h = HT1632C()
+    h.text('hello', 8, 0, GREEN)
+    sleep_us(1000000)
+    for i in range(20):
+        h.fill(BLACK)
+        h.text(str(i), 0, 0, RED)
+        h.show()
+        sleep_us(1000000)
