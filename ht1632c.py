@@ -4,9 +4,18 @@ from utime import sleep_us
 
 # Colors
 BLACK = const(0)
-GREEN = const(1)
-RED = const(2)
+GREEN = const(2)
+RED = const(1)
 ORANGE = const(3)
+
+# Chip selection
+SELECT_NONE = const(0)
+SELECT_ALL = const(1)
+NB_CHIPS = const(4)
+
+# Display infos
+WIDTH = const(32)
+HEIGHT = const(16)
 
 # Hardware related, data from
 # https://cdn-shop.adafruit.com/datasheets/ht1632cv120.pdf
@@ -61,12 +70,11 @@ PWM_16_16 = const(0b100101011110)
 
 
 class HT1632C(FrameBuffer):
-    def __init__(self, width=32, height=16,
-                 clk_pin=15, cs_pin=12, data_pin=14, wr_pin=13,
-                 intensity=PWM_8_16):
-        self._buffer = bytearray(width * height // 4)  # 2 bits per led
+    def __init__(self, clk_pin=15, cs_pin=12, data_pin=14, wr_pin=13,
+                 intensity=PWM_10_16):
+        self._buffer = bytearray(WIDTH * HEIGHT // 4)  # 2 bits per led
         self._intensity_value = intensity
-        super(HT1632C, self).__init__(self._buffer, width, height, GS2_HMSB)
+        super(HT1632C, self).__init__(self._buffer, WIDTH, HEIGHT, GS2_HMSB)
 
         self.clk = Pin(clk_pin, Pin.OUT)
         self.cs = Pin(cs_pin, Pin.OUT)
@@ -94,76 +102,47 @@ class HT1632C(FrameBuffer):
         ])
 
     def _is_green(self, value):
-        return value in (1, 3)
-        # Value is either 3 (0b11) or 1 (0b01)
-        #return value & 0b1
+        """Bitwise test if value is ORANGE (0b11) or GREEN (0b01)"""
+        return value & 0b1
 
     def _is_red(self, value):
-        return value in (2, 3)
-        # Value is either 3 (0b11) or 2 (0b10)
-        #return (value & 0b10) >> 1
+        """Bitwise test if value is ORANGE (0b11) or RED (0b10)"""
+        return (value & 0b10) >> 1
 
     def _delay(self):
-        #sleep_us(1)
-        pass
+        sleep_us(1)
 
-    def _select_all(self):
-        self.clk.off()
-        self.cs.off()
-        self._delay()
-
+    def _clk_pulse(self):
         self.clk.on()
         self._delay()
         self.clk.off()
-
         self._delay()
 
-        self.clk.on()
-        self._delay()
+    def _select(self, chip_index):
+        if chip_index == SELECT_NONE:
+            self.cs.on()
+            self._delay()
+            for idx in range(NB_CHIPS):
+                self._clk_pulse()
 
-        self.clk.off()
-        self._delay()
+        elif chip_index == SELECT_ALL:
+            self.cs.off()
+            self._delay()
+            for idx in range(NB_CHIPS):
+                self._clk_pulse()
 
-        self.clk.on()
-        self._delay()
+        else:
+            if chip_index < 0 or chip_index > NB_CHIPS:
+                raise ValueError('Invalid chip index')
 
-        self.clk.off()
-        self._delay()
-
-        self.clk.on()
-        self._delay()
-
-        self.clk.off()
-        self._delay()
-
-        self.clk.on()
-        self._delay()
-
-    def _select_none(self):
-        self.clk.off()
-        self.cs.on()
-        self._delay()
-
-        self.clk.on()
-        self._delay()
-
-        self.clk.off()
-        self._delay()
-
-        self.clk.on()
-        self._delay()
-
-        self.clk.off()
-        self._delay()
-
-        self.clk.on()
-        self._delay()
-
-        self.clk.off()
-        self._delay()
-
-        self.clk.on()
-        self._delay()
+            self._select(SELECT_NONE)
+            self.cs.off()
+            self._delay()
+            self._clk_pulse()
+            self._delay()
+            self.cs.on()
+            for idx in range(1, chip_index):
+                self._clk_pulse()
 
     def _write_cmd(self, cmd):
         cmd = cmd & 0x0fff
@@ -261,12 +240,12 @@ class HT1632C(FrameBuffer):
                     self._intensity_value,
                     BLINK_OFF,
                     LED_ON):
-            self._select_all()
+            self._select(SELECT_ALL)
             self._write_cmd(cmd)
-            self._select_none()
+            self._select(SELECT_NONE)
 
     def clear(self):
-        self._select_all()
+        self._select(SELECT_ALL)
 
         self.wr.off()
         self.data.on()
@@ -306,69 +285,54 @@ class HT1632C(FrameBuffer):
                 self.wr.on()
                 self._delay()
 
-        self._select_none()
+        self._select(SELECT_NONE)
 
     def show(self):
         self.clk.off()
         self.cs.off()
         self._delay()
 
-        self.clk.on()
-        self._delay()
-        self.clk.off()
+        self._clk_pulse()
 
         # HT1632 #1, ROW = 0, COL = 0 and 1
         m1 = self.get_matrix_data(0, 0)
         m2 = self.get_matrix_data(0, 1)
         self._write_data(m1, m2)
+        self._delay()
 
         self.cs.on()
         self._delay()
 
-        self.clk.on()
-        self._delay()
-        self.clk.off()
+        self._clk_pulse()
 
         # HT1632 #2, ROW = 0, COL = 2 and 3
         m1 = self.get_matrix_data(0, 2)
         m2 = self.get_matrix_data(0, 3)
         self._write_data(m1, m2)
-
         self._delay()
 
-        self.clk.on()
-        self._delay()
-        self.clk.off()
+        self._clk_pulse()
 
         # HT1632 #3, ROW = 1, COL = 0 and 1
         m1 = self.get_matrix_data(1, 0)
         m2 = self.get_matrix_data(1, 1)
         self._write_data(m1, m2)
-
         self._delay()
 
-        self.clk.on()
-        self._delay()
-        self.clk.off()
+        self._clk_pulse()
 
         # HT1632 #4, ROW = 1, COL = 2 and 3
         m1 = self.get_matrix_data(1, 2)
         m2 = self.get_matrix_data(1, 3)
         self._write_data(m1, m2)
-
         self._delay()
 
-        self.clk.on()
-        self._delay()
-        self.clk.off()
+        self._clk_pulse()
 
+        # DEBUG
+        for row in range(HEIGHT):
+            for col in range(WIDTH):
+                char = ' ' if self.pixel(col, row) == 0 else '0'
+                print(char, end='')
+            print()
 
-def test():
-    h = HT1632C()
-    h.text('hello', 8, 0, GREEN)
-    sleep_us(1000000)
-    for i in range(20):
-        h.fill(BLACK)
-        h.text(str(i), 0, 0, RED)
-        h.show()
-        sleep_us(1000000)
