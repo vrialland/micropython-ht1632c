@@ -142,14 +142,16 @@ class HT1632C(FrameBuffer):
         # Reinit display
         self.begin()
 
-    def get_matrix_data(self, matrix_row, matrix_col):
+    def get_ht1632_data(self, matrix_row, matrix_col):
         start_row = matrix_row * 8
-        start_col = matrix_col * 8
-        return bytearray([
+        stop_row = start_row + 8
+        start_col = matrix_col * 16
+        stop_col = start_col + 16
+        return bytearray(
             self.pixel(col, row)
-            for col in range(start_col, start_col + 8)
-            for row in range(start_row, start_row + 8)
-        ])
+            for col in range(start_col, stop_col)
+            for row in range(start_row, stop_row)
+        )
 
     def _delay(self):
         pass
@@ -194,7 +196,7 @@ class HT1632C(FrameBuffer):
             self.wr(1)
             self._delay()
 
-    def _write_data(self, m1, m2):
+    def _write_data(self, red, green):
         self.wr(0)
         self.data(1)
         self._delay()
@@ -224,10 +226,8 @@ class HT1632C(FrameBuffer):
             self.wr(1)
             self._delay()
 
-        # Red matrix 1
-        for value in m1:
-            value = is_red(value)
-
+        # Red layer
+        for value in red:
             self.wr(0)
             self.data(value)
             self._delay()
@@ -235,32 +235,8 @@ class HT1632C(FrameBuffer):
             self.wr(1)
             self._delay()
 
-        # Red matrix 2
-        for value in m2:
-            value = is_red(value)
-
-            self.wr(0)
-            self.data(value)
-            self._delay()
-
-            self.wr(1)
-            self._delay()
-
-        # Green matrix 1
-        for value in m1:
-            value = is_green(value)
-
-            self.wr(0)
-            self.data(value)
-            self._delay()
-
-            self.wr(1)
-            self._delay()
-
-        # Green matrix 2
-        for value in m2:
-            value = is_green(value)
-
+        # Green layer
+        for value in green:
             self.wr(0)
             self.data(value)
             self._delay()
@@ -330,10 +306,11 @@ class HT1632C(FrameBuffer):
 
         self.pulse_clk()
 
-        # HT1632 #1, ROW = 0, COL = 0 and 1
-        m1 = self.get_matrix_data(0, 0)
-        m2 = self.get_matrix_data(0, 1)
-        self._write_data(m1, m2)
+        # HT1632 #1
+        data = self.get_ht1632_data(0, 0)
+        red = bytearray(is_red(value) for value in data)
+        green = bytearray(is_green(value) for value in data)
+        self._write_data(red, green)
         self._delay()
 
         self.cs(1)
@@ -341,26 +318,29 @@ class HT1632C(FrameBuffer):
 
         self.pulse_clk()
 
-        # HT1632 #2, ROW = 0, COL = 2 and 3
-        m1 = self.get_matrix_data(0, 2)
-        m2 = self.get_matrix_data(0, 3)
-        self._write_data(m1, m2)
+        # HT1632 #2
+        data = self.get_ht1632_data(0, 1)
+        red = bytearray(is_red(value) for value in data)
+        green = bytearray(is_green(value) for value in data)
+        self._write_data(red, green)
         self._delay()
 
         self.pulse_clk()
 
-        # HT1632 #3, ROW = 1, COL = 0 and 1
-        m1 = self.get_matrix_data(1, 0)
-        m2 = self.get_matrix_data(1, 1)
-        self._write_data(m1, m2)
+        # HT1632 #3
+        data = self.get_ht1632_data(1, 0)
+        red = bytearray(is_red(value) for value in data)
+        green = bytearray(is_green(value) for value in data)
+        self._write_data(red, green)
         self._delay()
 
         self.pulse_clk()
 
-        # HT1632 #4, ROW = 1, COL = 2 and 3
-        m1 = self.get_matrix_data(1, 2)
-        m2 = self.get_matrix_data(1, 3)
-        self._write_data(m1, m2)
+        # HT1632 #4
+        data = self.get_ht1632_data(1, 1)
+        red = bytearray(is_red(value) for value in data)
+        green = bytearray(is_green(value) for value in data)
+        self._write_data(red, green)
         self._delay()
 
         self.pulse_clk()
