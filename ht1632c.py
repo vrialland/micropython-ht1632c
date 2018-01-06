@@ -1,6 +1,7 @@
 from framebuf import GS2_HMSB, FrameBuffer
 from machine import Pin
 from utime import sleep_us
+import micropython
 
 # Colors
 BLACK = const(0)
@@ -69,6 +70,40 @@ PWM_15_16 = const(0b100101011100)
 PWM_16_16 = const(0b100101011110)
 
 
+@micropython.viper
+def fast_write(pin: int, value: int):
+    """Pins states are stored in RAM at `0x60000300`. Each bit represents
+    a pin state, e.g. bit 1 is GPIO 1 state.
+    Writing directly in RAM is faster than using `machine.Pin` methods
+    References:
+        - https://github.com/esp8266/esp8266-wiki/wiki/gpio-registers
+        - https://forum.micropython.org/viewtopic.php?t=2766
+    """
+    # Assert value is 0 or 1
+    value &= 0b1
+    # Write 2 bits after to substract, 1 bit after to add for the nth GPIO pin
+    ptr32(0x60000300)[2 - value] = (1 << pin)
+
+
+@micropython.viper
+def fast_pulse(pin: int):
+    """Same as fast write for quick pulse on a pin"""
+    ptr32(0x60000300)[1] = (1 << pin)
+    ptr32(0x60000300)[2] = (1 << pin)
+
+
+@micropython.native
+def is_green(value):
+    """Bitwise test if value is ORANGE (0b11) or GREEN (0b01)"""
+    return value & 0b1
+
+
+@micropython.native
+def is_red(value):
+    """Bitwise test if value is ORANGE (0b11) or RED (0b10)"""
+    return (value & 0b10) >> 1
+
+
 class HT1632C(FrameBuffer):
     def __init__(self, clk_pin=15, cs_pin=12, data_pin=14, wr_pin=13,
                  intensity=PWM_10_16):
@@ -76,13 +111,28 @@ class HT1632C(FrameBuffer):
         self._intensity_value = intensity
         super(HT1632C, self).__init__(self._buffer, WIDTH, HEIGHT, GS2_HMSB)
 
-        self.clk = Pin(clk_pin, Pin.OUT)
-        self.cs = Pin(cs_pin, Pin.OUT)
-        self.data = Pin(data_pin, Pin.OUT)
-        self.wr = Pin(wr_pin, Pin.OUT)
+        self._clk_pin = clk_pin
+        self._cs_pin = cs_pin
+        self._data_pin = data_pin
+        self._wr_pin = wr_pin
 
         self.begin()
         self.clear()
+
+    def clk(self, value):
+        fast_write(self._clk_pin, value)
+
+    def pulse_clk(self):
+        fast_pulse(self._clk_pin)
+
+    def cs(self, value):
+        fast_write(self._cs_pin, value)
+
+    def data(self, value):
+        fast_write(self._data_pin, value)
+
+    def wr(self, value):
+        fast_write(self._wr_pin, value)
 
     def set_intensity(self, value):
         # Must be between 0 and 15
@@ -101,48 +151,34 @@ class HT1632C(FrameBuffer):
             for row in range(start_row, start_row + 8)
         ])
 
-    def _is_green(self, value):
-        """Bitwise test if value is ORANGE (0b11) or GREEN (0b01)"""
-        return value & 0b1
-
-    def _is_red(self, value):
-        """Bitwise test if value is ORANGE (0b11) or RED (0b10)"""
-        return (value & 0b10) >> 1
-
     def _delay(self):
-        sleep_us(1)
-
-    def _clk_pulse(self):
-        self.clk.on()
-        self._delay()
-        self.clk.off()
-        self._delay()
+        pass
 
     def _select(self, chip_index):
         if chip_index == SELECT_NONE:
-            self.cs.on()
+            self.cs(1)
             self._delay()
             for idx in range(NB_CHIPS):
-                self._clk_pulse()
+                self.pulse_clk()
 
         elif chip_index == SELECT_ALL:
-            self.cs.off()
+            self.cs(0)
             self._delay()
             for idx in range(NB_CHIPS):
-                self._clk_pulse()
+                self.pulse_clk()
 
         else:
             if chip_index < 0 or chip_index > NB_CHIPS:
                 raise ValueError('Invalid chip index')
 
             self._select(SELECT_NONE)
-            self.cs.off()
+            self.cs(0)
             self._delay()
-            self._clk_pulse()
+            self.pulse_clk()
             self._delay()
-            self.cs.on()
+            self.cs(1)
             for idx in range(1, chip_index):
-                self._clk_pulse()
+                self.pulse_clk()
 
     def _write_cmd(self, cmd):
         cmd = cmd & 0x0fff
@@ -151,85 +187,85 @@ class HT1632C(FrameBuffer):
             j = cmd & 0x0800
             cmd = cmd << 1
             j = j >> 11
-            self.wr.off()
+            self.wr(0)
             self.data(j)
             self._delay()
 
-            self.wr.on()
+            self.wr(1)
             self._delay()
 
     def _write_data(self, m1, m2):
-        self.wr.off()
-        self.data.on()
+        self.wr(0)
+        self.data(1)
         self._delay()
 
-        self.wr.on()
+        self.wr(1)
         self._delay()
 
-        self.wr.off()
-        self.data.off()
+        self.wr(0)
+        self.data(0)
         self._delay()
 
-        self.wr.on()
+        self.wr(1)
         self._delay()
 
-        self.wr.off()
-        self.data.on()
+        self.wr(0)
+        self.data(1)
         self._delay()
 
-        self.wr.on()
+        self.wr(1)
         self._delay()
 
         for i in range(7):
-            self.wr.off()
-            self.data.off()
+            self.wr(0)
+            self.data(0)
             self._delay()
 
-            self.wr.on()
+            self.wr(1)
             self._delay()
 
         # Red matrix 1
         for value in m1:
-            value = self._is_red(value)
+            value = is_red(value)
 
-            self.wr.off()
+            self.wr(0)
             self.data(value)
             self._delay()
 
-            self.wr.on()
+            self.wr(1)
             self._delay()
 
         # Red matrix 2
         for value in m2:
-            value = self._is_red(value)
+            value = is_red(value)
 
-            self.wr.off()
+            self.wr(0)
             self.data(value)
             self._delay()
 
-            self.wr.on()
+            self.wr(1)
             self._delay()
 
         # Green matrix 1
         for value in m1:
-            value = self._is_green(value)
+            value = is_green(value)
 
-            self.wr.off()
+            self.wr(0)
             self.data(value)
             self._delay()
 
-            self.wr.on()
+            self.wr(1)
             self._delay()
 
         # Green matrix 2
         for value in m2:
-            value = self._is_green(value)
+            value = is_green(value)
 
-            self.wr.off()
+            self.wr(0)
             self.data(value)
             self._delay()
 
-            self.wr.on()
+            self.wr(1)
             self._delay()
 
     def begin(self):
@@ -247,52 +283,52 @@ class HT1632C(FrameBuffer):
     def clear(self):
         self._select(SELECT_ALL)
 
-        self.wr.off()
-        self.data.on()
+        self.wr(0)
+        self.data(1)
         self._delay()
 
-        self.wr.on()
+        self.wr(1)
         self._delay()
 
-        self.wr.off()
-        self.data.off()
+        self.wr(0)
+        self.data(0)
         self._delay()
 
-        self.wr.on()
+        self.wr(1)
         self._delay()
 
-        self.wr.off()
-        self.data.on()
+        self.wr(0)
+        self.data(1)
         self._delay()
 
-        self.wr.on()
+        self.wr(1)
         self._delay()
 
         for i in range(7):
-            self.wr.off()
-            self.data.off()
+            self.wr(0)
+            self.data(0)
             self._delay()
 
-            self.wr.on()
+            self.wr(1)
             self._delay()
 
         for i in range(32):
             for j in range(8):
-                self.wr.off()
-                self.data.off()
+                self.wr(0)
+                self.data(0)
                 self._delay()
 
-                self.wr.on()
+                self.wr(1)
                 self._delay()
 
         self._select(SELECT_NONE)
 
     def show(self):
-        self.clk.off()
-        self.cs.off()
+        self.clk(0)
+        self.cs(0)
         self._delay()
 
-        self._clk_pulse()
+        self.pulse_clk()
 
         # HT1632 #1, ROW = 0, COL = 0 and 1
         m1 = self.get_matrix_data(0, 0)
@@ -300,10 +336,10 @@ class HT1632C(FrameBuffer):
         self._write_data(m1, m2)
         self._delay()
 
-        self.cs.on()
+        self.cs(1)
         self._delay()
 
-        self._clk_pulse()
+        self.pulse_clk()
 
         # HT1632 #2, ROW = 0, COL = 2 and 3
         m1 = self.get_matrix_data(0, 2)
@@ -311,7 +347,7 @@ class HT1632C(FrameBuffer):
         self._write_data(m1, m2)
         self._delay()
 
-        self._clk_pulse()
+        self.pulse_clk()
 
         # HT1632 #3, ROW = 1, COL = 0 and 1
         m1 = self.get_matrix_data(1, 0)
@@ -319,7 +355,7 @@ class HT1632C(FrameBuffer):
         self._write_data(m1, m2)
         self._delay()
 
-        self._clk_pulse()
+        self.pulse_clk()
 
         # HT1632 #4, ROW = 1, COL = 2 and 3
         m1 = self.get_matrix_data(1, 2)
@@ -327,12 +363,4 @@ class HT1632C(FrameBuffer):
         self._write_data(m1, m2)
         self._delay()
 
-        self._clk_pulse()
-
-        # DEBUG
-        for row in range(HEIGHT):
-            for col in range(WIDTH):
-                char = ' ' if self.pixel(col, row) == 0 else '0'
-                print(char, end='')
-            print()
-
+        self.pulse_clk()
