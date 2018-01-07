@@ -117,7 +117,7 @@ class HT1632C(FrameBuffer):
         self._wr_pin = wr_pin
 
         self.begin()
-        self.clear()
+        self.show()
 
     def clk(self, value):
         fast_write(self._clk_pin, value)
@@ -143,6 +143,7 @@ class HT1632C(FrameBuffer):
         self.begin()
 
     def get_ht1632_data(self, matrix_row, matrix_col):
+        """Get data associated to an HT1632 chip"""
         start_row = matrix_row * 8
         stop_row = start_row + 8
         start_col = matrix_col * 16
@@ -306,41 +307,17 @@ class HT1632C(FrameBuffer):
 
         self.pulse_clk()
 
-        # HT1632 #1
-        data = self.get_ht1632_data(0, 0)
-        red = bytearray(is_red(value) for value in data)
-        green = bytearray(is_green(value) for value in data)
-        self._write_data(red, green)
-        self._delay()
+        for chip in range(NB_CHIPS):
+            row = 0 if chip in (0, 1) else 1
+            col = 0 if chip in (0, 2) else 1
 
-        self.cs(1)
-        self._delay()
+            data = self.get_ht1632_data(row, col)
+            red = bytearray(is_red(value) for value in data)
+            green = bytearray(is_green(value) for value in data)
+            self._write_data(red, green)
+            self._delay()
 
-        self.pulse_clk()
+            if chip == 0:
+                self.cs(1)
 
-        # HT1632 #2
-        data = self.get_ht1632_data(0, 1)
-        red = bytearray(is_red(value) for value in data)
-        green = bytearray(is_green(value) for value in data)
-        self._write_data(red, green)
-        self._delay()
-
-        self.pulse_clk()
-
-        # HT1632 #3
-        data = self.get_ht1632_data(1, 0)
-        red = bytearray(is_red(value) for value in data)
-        green = bytearray(is_green(value) for value in data)
-        self._write_data(red, green)
-        self._delay()
-
-        self.pulse_clk()
-
-        # HT1632 #4
-        data = self.get_ht1632_data(1, 1)
-        red = bytearray(is_red(value) for value in data)
-        green = bytearray(is_green(value) for value in data)
-        self._write_data(red, green)
-        self._delay()
-
-        self.pulse_clk()
+            self.pulse_clk()
