@@ -10,8 +10,8 @@ RED = const(1)
 ORANGE = const(3)
 
 # Chip selection
-SELECT_NONE = const(0)
-SELECT_ALL = const(1)
+SELECT_NONE = const(-2)
+SELECT_ALL = const(-1)
 NB_CHIPS = const(4)
 
 # Display infos
