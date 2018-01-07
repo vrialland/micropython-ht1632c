@@ -1,4 +1,4 @@
-from ht1632c import HT1632C, GREEN, ORANGE, RED
+from ht1632c import HT1632C, BLACK, GREEN, ORANGE, RED
 from utils import timeit
 
 
