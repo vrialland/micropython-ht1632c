@@ -115,27 +115,11 @@ class HT1632C(FrameBuffer):
         """Bitwise test if value is ORANGE (0b11) or RED (0b10)"""
         return (value & 0b10) >> 1
 
-    def _select(self, chip_index):
-        if chip_index == SELECT_NONE:
-            self.cs(1)
-            for idx in range(NB_CHIPS):
-                self.pulse_clk()
-
-        elif chip_index == SELECT_ALL:
-            self.cs(0)
-            for idx in range(NB_CHIPS):
-                self.pulse_clk()
-
-        else:
-            if chip_index < 0 or chip_index > NB_CHIPS:
-                raise ValueError('Invalid chip index')
-
-            self._select(SELECT_NONE)
-            self.cs(0)
+    def _select(self, action):
+        value = 1 if action == SELECT_NONE else 0
+        self.cs(value)
+        for idx in range(NB_CHIPS):
             self.pulse_clk()
-            self.cs(1)
-            for idx in range(1, chip_index):
-                self.pulse_clk()
 
     def _write_cmd(self, cmd):
         cmd = cmd & 0x0fff
