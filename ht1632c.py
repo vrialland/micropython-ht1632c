@@ -1,5 +1,6 @@
 from framebuf import GS2_HMSB, FrameBuffer
 from machine import Pin
+import micropython
 
 # Colors
 BLACK = const(0)
@@ -101,11 +102,11 @@ class HT1632C(FrameBuffer):
         stop_row = start_row + 8
         start_col = matrix_col * 16
         stop_col = start_col + 16
-        return bytearray(
+        return [
             self.pixel(col, row)
             for col in range(start_col, stop_col)
             for row in range(start_row, stop_row)
-        )
+        ]
 
     def is_green(self, value):
         """Bitwise test if value is ORANGE (0b11) or GREEN (0b01)"""
@@ -140,6 +141,7 @@ class HT1632C(FrameBuffer):
             self.data(j)
             self.wr(1)
 
+    @micropython.native
     def _write_data(self, red, green):
         """Write a part of the framebuffer data to the selected chip"""
 
@@ -182,6 +184,10 @@ class HT1632C(FrameBuffer):
 
     def show(self):
         """Display framebuffer data on hardware"""
+        self._select(SELECT_ALL)
+        self._write_cmd(SYS_EN)
+        self._select(SELECT_NONE)
+
         for chip in range(NB_CHIPS):
             self._select(chip)
 
@@ -189,8 +195,8 @@ class HT1632C(FrameBuffer):
             col = 0 if chip in (0, 2) else 1
 
             data = self.get_ht1632_data(row, col)
-            red = bytearray(self.is_red(value) for value in data)
-            green = bytearray(self.is_green(value) for value in data)
+            red = (self.is_red(value) for value in data)
+            green = (self.is_green(value) for value in data)
             self._write_data(red, green)
 
             self._select(SELECT_NONE)
