@@ -115,15 +115,23 @@ class HT1632C(FrameBuffer):
         """Bitwise test if value is ORANGE (0b11) or RED (0b10)"""
         return (value & 0b10) >> 1
 
-    def _select(self, action):
-        value = 1 if action == SELECT_NONE else 0
-        self.cs(value)
-        for idx in range(NB_CHIPS):
+    def _select(self, chip):
+        if chip in (SELECT_NONE, SELECT_ALL):
+            value = 1 if chip == SELECT_NONE else 0
+            self.cs(value)
+            for idx in range(NB_CHIPS):
+                self.pulse_clk()
+        else:
+            self._select(SELECT_NONE)
+            self.cs(0)
             self.pulse_clk()
+            self.cs(1)
+            for idx in range(chip):
+                self.pulse_clk()
 
     def _write_cmd(self, cmd):
+        """Write a command, one bit at a time"""
         cmd = cmd & 0x0fff
-
         for i in range(12):
             j = cmd & 0x0800
             cmd = cmd << 1
@@ -133,21 +141,15 @@ class HT1632C(FrameBuffer):
             self.wr(1)
 
     def _write_data(self, red, green):
-        self.wr(0)
-        self.data(1)
+        """Write a part of the framebuffer data to the selected chip"""
 
-        self.wr(1)
+        # Write WR command
+        for data in (1, 0, 1):
+            self.wr(0)
+            self.data(data)
+            self.wr(1)
 
-        self.wr(0)
-        self.data(0)
-
-        self.wr(1)
-
-        self.wr(0)
-        self.data(1)
-
-        self.wr(1)
-
+        # Send address (0 as we're writing sequentially)
         for i in range(7):
             self.wr(0)
             self.data(0)
@@ -166,6 +168,7 @@ class HT1632C(FrameBuffer):
             self.wr(1)
 
     def begin(self):
+        """Initialize hardware"""
         for cmd in (SYS_DIS,
                     COM_NMOS_8,
                     RC_MASTER_MODE,
@@ -178,11 +181,10 @@ class HT1632C(FrameBuffer):
             self._select(SELECT_NONE)
 
     def show(self):
-        self.clk(0)
-        self.cs(0)
-        self.pulse_clk()
-
+        """Display framebuffer data on hardware"""
         for chip in range(NB_CHIPS):
+            self._select(chip)
+
             row = 0 if chip in (0, 1) else 1
             col = 0 if chip in (0, 2) else 1
 
@@ -191,7 +193,4 @@ class HT1632C(FrameBuffer):
             green = bytearray(self.is_green(value) for value in data)
             self._write_data(red, green)
 
-            if chip == 0:
-                self.cs(1)
-
-            self.pulse_clk()
+            self._select(SELECT_NONE)
