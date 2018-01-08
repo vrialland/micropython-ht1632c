@@ -175,9 +175,9 @@ class HT1632C(FrameBuffer):
                     COM_NMOS_8,
                     RC_MASTER_MODE,
                     SYS_EN,
-                    self._intensity_value,
+                    LED_ON,
                     BLINK_OFF,
-                    LED_ON):
+                    self._intensity_value):
             self._select(SELECT_ALL)
             self._write_cmd(cmd)
             self._select(SELECT_NONE)
@@ -194,5 +194,3 @@ class HT1632C(FrameBuffer):
             red = (self.is_red(value) for value in data)
             green = (self.is_green(value) for value in data)
             self._write_data(red, green)
-
-            self._select(SELECT_NONE)
