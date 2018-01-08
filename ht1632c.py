@@ -184,10 +184,6 @@ class HT1632C(FrameBuffer):
 
     def show(self):
         """Display framebuffer data on hardware"""
-        self._select(SELECT_ALL)
-        self._write_cmd(SYS_EN)
-        self._select(SELECT_NONE)
-
         for chip in range(NB_CHIPS):
             self._select(chip)
 
