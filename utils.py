@@ -1,3 +1,4 @@
+from machine import disable_irq, enable_irq
 import utime
 
 

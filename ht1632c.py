@@ -1,11 +1,12 @@
 from framebuf import GS2_HMSB, FrameBuffer
-from machine import Pin
+from machine import disable_irq, enable_irq, Pin
 import micropython
+
 
 # Colors
 BLACK = const(0)
-GREEN = const(2)
-RED = const(1)
+GREEN = const(1)
+RED = const(2)
 ORANGE = const(3)
 
 # Chip selection
@@ -69,6 +70,17 @@ PWM_15_16 = const(0b100101011100)
 PWM_16_16 = const(0b100101011110)
 
 
+class NoIRQ:
+    def __init__(self):
+        self.irq_state = None
+
+    def __enter__(self):
+        self.irq_state = disable_irq()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        enable_irq(self.irq_state)
+
+
 class HT1632C(FrameBuffer):
     def __init__(self, clk_pin=15, cs_pin=12, data_pin=14, wr_pin=13,
                  intensity=PWM_10_16):
@@ -109,12 +121,10 @@ class HT1632C(FrameBuffer):
         ]
 
     def is_green(self, value):
-        """Bitwise test if value is ORANGE (0b11) or GREEN (0b01)"""
-        return value & 0b1
+        return value == ORANGE or value == GREEN
 
     def is_red(self, value):
-        """Bitwise test if value is ORANGE (0b11) or RED (0b10)"""
-        return (value & 0b10) >> 1
+        return value == ORANGE or value == RED
 
     def _select(self, chip):
         if chip in (SELECT_NONE, SELECT_ALL):
@@ -142,7 +152,7 @@ class HT1632C(FrameBuffer):
             self.wr(1)
 
     @micropython.native
-    def _write_data(self, red, green):
+    def _write_data(self, green, red):
         """Write a part of the framebuffer data to the selected chip"""
 
         # Write WR command
@@ -157,40 +167,41 @@ class HT1632C(FrameBuffer):
             self.data(0)
             self.wr(1)
 
-        # Red layer
-        for value in red:
-            self.wr(0)
-            self.data(value)
-            self.wr(1)
-
         # Green layer
         for value in green:
             self.wr(0)
             self.data(value)
             self.wr(1)
 
+        # Red layer
+        for value in red:
+            self.wr(0)
+            self.data(value)
+            self.wr(1)
+
     def begin(self):
         """Initialize hardware"""
-        for cmd in (SYS_DIS,
-                    COM_NMOS_8,
-                    RC_MASTER_MODE,
-                    SYS_EN,
-                    LED_ON,
-                    BLINK_OFF,
-                    self._intensity_value):
-            self._select(SELECT_ALL)
-            self._write_cmd(cmd)
-            self._select(SELECT_NONE)
+        with NoIRQ():
+            for cmd in (SYS_DIS,
+                        COM_NMOS_8,
+                        RC_MASTER_MODE,
+                        SYS_EN,
+                        LED_ON,
+                        BLINK_OFF,
+                        self._intensity_value):
+                self._select(SELECT_ALL)
+                self._write_cmd(cmd)
+                self._select(SELECT_NONE)
 
     def show(self):
         """Display framebuffer data on hardware"""
-        for chip in range(NB_CHIPS):
-            self._select(chip)
-
-            row = 0 if chip in (0, 1) else 1
-            col = 0 if chip in (0, 2) else 1
-
-            data = self.get_ht1632_data(row, col)
-            red = (self.is_red(value) for value in data)
-            green = (self.is_green(value) for value in data)
-            self._write_data(red, green)
+        # Disable IRQ to improve speed
+        with NoIRQ():
+            for chip in range(NB_CHIPS):
+                self._select(chip)
+                row = 0 if chip in (0, 1) else 1
+                col = 0 if chip in (0, 2) else 1
+                data = self.get_ht1632_data(row, col)
+                green = (self.is_green(value) for value in data)
+                red = (self.is_red(value) for value in data)
+                self._write_data(green, red)
