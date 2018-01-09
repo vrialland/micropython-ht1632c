@@ -70,6 +70,16 @@ PWM_15_16 = const(0b100101011100)
 PWM_16_16 = const(0b100101011110)
 
 
+@micropython.native
+def is_green(value):
+    return value == ORANGE or value == GREEN
+
+
+@micropython.native
+def is_red(value):
+    return value == ORANGE or value == RED
+
+
 class NoIRQ:
     def __init__(self):
         self.irq_state = None
@@ -119,12 +129,6 @@ class HT1632C(FrameBuffer):
             for col in range(start_col, stop_col)
             for row in range(start_row, stop_row)
         ]
-
-    def is_green(self, value):
-        return value == ORANGE or value == GREEN
-
-    def is_red(self, value):
-        return value == ORANGE or value == RED
 
     def _select(self, chip):
         if chip in (SELECT_NONE, SELECT_ALL):
@@ -202,6 +206,6 @@ class HT1632C(FrameBuffer):
                 row = 0 if chip in (0, 1) else 1
                 col = 0 if chip in (0, 2) else 1
                 data = self.get_ht1632_data(row, col)
-                green = (self.is_green(value) for value in data)
-                red = (self.is_red(value) for value in data)
+                green = (is_green(value) for value in data)
+                red = (is_red(value) for value in data)
                 self._write_data(green, red)
